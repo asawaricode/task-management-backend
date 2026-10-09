@@ -55,7 +55,8 @@ task-management-system/
   scripts/
     migrate.js               # Versioned migration runner
     seed.js                  # Seeder runner
-  postman/                   # Postman collection (added in later stages)
+  postman/
+    Task-Management-System.postman_collection.json # Importable Postman collection
   .env.example               # Environment variable template
   .gitignore
   package.json
@@ -542,6 +543,89 @@ Updates a task's status. Restricted strictly to users with the `admin` role.
 
 ---
 
+## Postman Collection
+
+An importable Postman collection is provided at:
+[`postman/Task-Management-System.postman_collection.json`](file:///c:/Users/Admin/Desktop/TASK-MANAGEMENT-SYSTEM/postman/Task-Management-System.postman_collection.json)
+
+### Importing into Postman
+1. Open Postman.
+2. Click **Import** (top-left).
+3. Select or drag-and-drop [`postman/Task-Management-System.postman_collection.json`](file:///c:/Users/Admin/Desktop/TASK-MANAGEMENT-SYSTEM/postman/Task-Management-System.postman_collection.json).
+4. The **Task Management System API** collection will appear in your workspace.
+
+### Collection Variables
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `baseUrl` | `http://localhost:3000` | Target API host and port |
+| `adminToken` | *(Dynamic)* | JWT token automatically captured on Admin Login |
+| `userToken` | *(Dynamic)* | JWT token automatically captured on User Login |
+| `taskId` | `1` *(Dynamic)* | ID of task owned by regular user (captured on create) |
+| `otherTaskId` | `2` *(Dynamic)* | ID of task owned by admin / another user |
+
+### Automated Scripts & Tests
+- **Automatic Token Storage**: Logging in as admin or user automatically captures and stores tokens in collection and environment variables.
+- **Dynamic Task Linking**: Creating a task as regular user stores `taskId` for subsequent retrieval and update tests.
+- **Pre-configured Assertions**: Each request includes tests verifying status codes, payload structures, role access control, and error handling.
+
+### Included Test Requests (20 Scenarios + Health Check)
+1. **Health Check**: `GET /` — Confirms server is online.
+2. **01 - Register a regular user**: `POST /api/auth/register` — Successful registration with role `user`.
+3. **02 - Register with missing fields**: `POST /api/auth/register` — Returns 400 Bad Request.
+4. **03 - Attempt duplicate registration**: `POST /api/auth/register` — Returns 409 Conflict.
+5. **04 - Login as the seeded admin**: `POST /api/auth/login` — Returns 200 and captures `adminToken`.
+6. **05 - Login as the seeded regular user**: `POST /api/auth/login` — Returns 200 and captures `userToken`.
+7. **06 - Login with invalid credentials**: `POST /api/auth/login` — Returns 401 Unauthorized.
+8. **07 - Create a task as a regular user**: `POST /api/tasks` — Returns 201, status defaults to `Pending`, captures `taskId`.
+9. **08 - List tasks as a regular user**: `GET /api/tasks` — Returns only owned tasks with pagination.
+10. **09 - Retrieve a task by ID**: `GET /api/tasks/:id` — Returns owned task details.
+11. **10 - Update an owned task**: `PUT /api/tasks/:id` — Updates title and description.
+12. **Setup - Create task as admin**: `POST /api/tasks` — Captures `otherTaskId` for cross-access tests.
+13. **11 - Attempt to retrieve another user's task**: `GET /api/tasks/:id` — Returns 404 (prevents resource disclosure).
+14. **12 - Attempt to edit another user's task**: `PUT /api/tasks/:id` — Returns 404 Not Found.
+15. **13 - Attempt to create a task with a spoofed user_id**: `POST /api/tasks` — Body `user_id` and `status` ignored.
+16. **14 - List tasks as admin**: `GET /api/tasks` — Returns all tasks across all users.
+17. **15 - Retrieve another user's task as admin**: `GET /api/tasks/:id` — Admin successfully accesses task.
+18. **16 - Edit another user's task as admin**: `PUT /api/tasks/:id` — Admin successfully edits task.
+19. **17 - Attempt to update task status as a regular user**: `PATCH /api/tasks/:id/status` — Returns 403 Forbidden.
+20. **18 - Update task status as admin**: `PATCH /api/tasks/:id/status` — Status updated to `In Progress`.
+21. **19 - Attempt an invalid task status**: `PATCH /api/tasks/:id/status` — Returns 400 Bad Request.
+22. **20 - Attempt to access a protected endpoint without a token**: `GET /api/tasks` — Returns 401 Unauthorized.
+
+---
+
+## Assumptions and Design Decisions
+
+1. **Stateless JWT Bearer Authentication**:
+   - Authentication relies strictly on standard `Authorization: Bearer <token>` headers.
+   - Cookies and server-side sessions are excluded to maintain stateless horizontal scalability.
+
+2. **Strict Layered Separation of Concerns**:
+   - `Routes`: Declare URL paths and bind middleware.
+   - `Controllers`: Parse HTTP requests, delegate to services, format JSON responses.
+   - `Services`: Encapsulate domain business logic, data validation, and permission checks.
+   - `Models`: Contain all SQL statements with parameterized queries using `mysql2`.
+   - `Middleware`: Authentication (`authenticate`), role authorization (`authorize`), and centralized error handling.
+
+3. **Privacy-Preserving 404 Errors**:
+   - When a regular user attempts to retrieve or edit a task owned by another user, the API responds with `404 Not Found` rather than `403 Forbidden`.
+   - This prevents malicious callers from enumerating task IDs and discovering whether specific tasks exist.
+
+4. **Task Ownership and Default Status Integrity**:
+   - Public task creation (`POST /api/tasks`) forces `user_id` to `req.user.id` and `status` to `'Pending'`.
+   - Any client-provided `user_id` or `status` in the request body is intentionally ignored.
+
+5. **Separation of Task Content Editing and Status Transitions**:
+   - `PUT /api/tasks/:id` only allows modifying `title` and `description`. It cannot alter `user_id` or `status`.
+   - Status changes are strictly managed through `PATCH /api/tasks/:id/status`, which is reserved exclusively for users with the `admin` role.
+
+6. **Restricted Public Registration**:
+   - `POST /api/auth/register` automatically assigns the `'user'` role.
+   - Administrative accounts cannot be created through the public API; they are provisioned via database seeders.
+
+---
+
 ## npm Scripts
 
 | Script          | Command                   | Description                          |
@@ -595,5 +679,4 @@ Updates a task's status. Restricted strictly to users with the `admin` role.
 - [x] **Stage 1** – Project foundation, database, migrations, seeders
 - [x] **Stage 2** – Authentication (register, login, JWT middleware)
 - [x] **Stage 3** – Task CRUD endpoints
-- [ ] **Stage 4** – Role-based access control
-- [ ] **Stage 5** – Postman collection & final documentation
+- [x] **Stage 4** – Postman collection & final verification
