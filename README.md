@@ -1,178 +1,242 @@
-# Task Management System
+# Task Management System API
 
-A RESTful Task Management API built with **Node.js**, **Express.js**, and **MySQL** as a Node.js Developer Intern assessment project.
+A professional RESTful Task Management API built with **Node.js**, **Express.js**, and **MySQL**, featuring stateless **JSON Web Token (JWT)** authentication and strict **Role-Based Access Control (RBAC)**.
 
----
-
-## Tech Stack
-
-| Layer          | Technology              |
-|----------------|-------------------------|
-| Runtime        | Node.js ≥ 18            |
-| Framework      | Express.js              |
-| Language       | JavaScript (CommonJS)   |
-| Database       | MySQL 5.7 / 8.x         |
-| DB Driver      | mysql2                  |
-| Authentication | JSON Web Tokens (JWT)   |
-| Password Hash  | bcryptjs                |
-| Config         | dotenv                  |
+Designed following a clean, layered architectural pattern:
+`Routes → Middleware → Controllers → Services → Models → MySQL`
 
 ---
 
-## Project Structure
+## Table of Contents
+
+1. [Key Features](#key-features)
+2. [Technology Stack](#technology-stack)
+3. [Project Architecture & Structure](#project-architecture--structure)
+4. [Prerequisites](#prerequisites)
+5. [Installation & Setup](#installation--setup)
+6. [MySQL Database Configuration](#mysql-database-configuration)
+7. [Environment Variables](#environment-variables)
+8. [Database Migrations & Seeders](#database-migrations--seeders)
+9. [Running the Application](#running-the-application)
+10. [API Endpoints Summary](#api-endpoints-summary)
+11. [Authentication & Authorization](#authentication--authorization)
+12. [Task Statuses & Workflow](#task-statuses--workflow)
+13. [Detailed Endpoint Documentation](#detailed-endpoint-documentation)
+14. [Seeded Development Credentials](#seeded-development-credentials)
+15. [Postman Collection Guide](#postman-collection-guide)
+16. [Security Notes & Design Decisions](#security-notes--design-decisions)
+17. [npm Scripts](#npm-scripts)
+
+---
+
+## Key Features
+
+- **Stateless Authentication**: User registration and login utilizing signed JSON Web Tokens (JWT) via standard HTTP `Bearer` tokens.
+- **Strong Password Hashing**: Passwords hashed with `bcryptjs` (salt cost factor 10); plaintext passwords are never stored or exposed.
+- **Role-Based Access Control (RBAC)**: Distinguishes between `user` and `admin` roles.
+  - Public registration strictly provisions the `user` role (preventing privilege escalation).
+  - Regular users can create, view, and edit only their own tasks.
+  - Inaccessible tasks return `404 Not Found` to prevent task enumeration and information leakage.
+  - Administrators can view and edit tasks belonging to any user.
+  - Task status updates are restricted exclusively to administrators.
+- **Clean Layered Architecture**: Strict separation of concerns (no SQL outside models, no HTTP logic outside controllers/middleware).
+- **SQL Injection Prevention**: 100% parameterized queries (`?` placeholders) executed via `mysql2`.
+- **Automated, Idempotent Migrations & Seeders**: Custom versioned runners tracking execution in `database_migrations` and `database_seeders` tables.
+- **Importable Postman Collection**: Automated token capture, dynamic ID linkage, and assertions covering 20 test scenarios.
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Runtime** | Node.js (≥ 18.x) | Server-side JavaScript runtime |
+| **Framework** | Express.js 4.x | Fast, unopinionated HTTP routing and middleware |
+| **Language** | JavaScript (CommonJS) | Standard Node.js module system (`require` / `module.exports`) |
+| **Database** | MySQL (5.7 / 8.x) | Relational SQL database storage |
+| **Database Driver** | `mysql2` | High-performance MySQL client with Promise API |
+| **Authentication** | `jsonwebtoken` (JWT) | Stateless token creation and verification |
+| **Password Security** | `bcryptjs` | One-way cryptographic password hashing |
+| **Configuration** | `dotenv` | Environment variable management |
+
+---
+
+## Project Architecture & Structure
+
+The codebase enforces a unidirectional layered architecture:
+```
+HTTP Request
+     ↓
+  Routes         (URL definitions and middleware binding)
+     ↓
+Middleware       (JWT authentication, role authorization, error handling)
+     ↓
+Controllers      (HTTP request parsing and response generation)
+     ↓
+ Services        (Business logic, validation rules, ownership checks)
+     ↓
+  Models         (Parameterized SQL queries via mysql2 connection pool)
+     ↓
+  MySQL          (Relational database)
+```
 
 ```
 task-management-system/
   src/
     config/
-      db.js                  # MySQL connection pool
+      db.js                  # MySQL connection pool and connectivity testing
     controllers/
-      auth.controller.js     # HTTP request & response handling for authentication
-      task.controller.js     # HTTP request & response handling for tasks
+      auth.controller.js     # HTTP request & response handlers for auth
+      task.controller.js     # HTTP request & response handlers for tasks
     middleware/
-      auth.middleware.js     # JWT Bearer token authentication & authorization
-      errorHandler.js        # Centralized Express error handler
+      auth.middleware.js     # JWT Bearer authentication and role-checking middleware
+      errorHandler.js        # Centralized Express error-handling middleware
     models/
-      index.js               # Central models registry
-      user.model.js          # Parameterized SQL queries for users table
-      task.model.js          # Parameterized SQL queries for tasks table
+      index.js               # Central models export registry
+      user.model.js          # Parameterized SQL queries for `users` table
+      task.model.js          # Parameterized SQL queries for `tasks` table
     routes/
-      index.js               # Central route registry & health endpoint
+      index.js               # Root API router (mounts /api/auth, /api/tasks, GET /)
       auth.routes.js         # Endpoints: /api/auth/register, /api/auth/login
-      task.routes.js         # Endpoints: /api/tasks CRUD & status
+      task.routes.js         # Endpoints: /api/tasks CRUD & status update
     services/
-      index.js               # Central services registry
-      auth.service.js        # Authentication business logic & password hashing
-      task.service.js        # Task business logic, validation & ownership checks
-    app.js                   # Express application setup
-    server.js                # Server entry point & startup
+      index.js               # Central services export registry
+      auth.service.js        # Auth business logic, validation, password hashing, JWT signing
+      task.service.js        # Task business logic, validation, ownership checks
+    app.js                   # Express application setup, global middleware & 404 handler
+    server.js                # Server entry point: verifies DB then starts HTTP listener
   database/
     migrations/
-      001_create_users_table.js
-      002_create_tasks_table.js
+      001_create_users_table.js   # Migration for `users` table
+      002_create_tasks_table.js   # Migration for `tasks` table
     seeders/
-      001_seed_users.js
+      001_seed_users.js           # Seeder for initial admin and user accounts
   scripts/
-    migrate.js               # Versioned migration runner
-    seed.js                  # Seeder runner
+    migrate.js               # Idempotent database migration runner
+    seed.js                  # Idempotent database seeder runner
   postman/
-    Task-Management-System.postman_collection.json # Importable Postman collection
-  .env.example               # Environment variable template
-  .gitignore
-  package.json
-  README.md
+    Task-Management-System.postman_collection.json # Complete importable Postman collection
+  .env.example               # Template for required environment variables
+  .gitignore                 # Git ignore file (excludes .env, node_modules/)
+  package.json               # Project manifest, scripts, and dependencies
+  package-lock.json          # Dependency lockfile
+  README.md                  # Comprehensive project documentation
 ```
 
 ---
 
-## Getting Started
+## Prerequisites
 
-### 1. Prerequisites
+Before setting up the project, ensure you have the following installed:
+- **Node.js** (version 18.0.0 or higher) — check with `node -v`
+- **npm** (version 9.x or higher) — check with `npm -v`
+- **MySQL Server** (version 5.7 or 8.x) running locally or accessible via network
 
-- Node.js ≥ 18 installed
-- MySQL server running locally (or remotely)
-- A MySQL database created for this project
+---
 
-### 2. Clone & Install
+## Installation & Setup
 
-```bash
-git clone <repository-url>
-cd task-management-system
-npm install
-```
+1. **Clone or navigate to the project directory**:
+   ```bash
+   cd task-management-system
+   ```
 
-### 3. Configure Environment Variables
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-Copy the example file and fill in your real values:
+---
+
+## MySQL Database Configuration
+
+1. Log into your MySQL console or management client:
+   ```bash
+   mysql -u root -p
+   ```
+
+2. Create the project database:
+   ```sql
+   CREATE DATABASE task_management_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+
+3. Confirm database creation:
+   ```sql
+   SHOW DATABASES LIKE 'task_management_db';
+   EXIT;
+   ```
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to create your local `.env` configuration file:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Open `.env` and fill in your MySQL credentials and application settings:
 
-```env
-PORT=3000
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_mysql_password
-DB_NAME=task_management_db
-JWT_SECRET=your_super_secret_jwt_key
-JWT_EXPIRES_IN=1d
-```
+| Variable | Description | Default / Example Value |
+|---|---|---|
+| `PORT` | HTTP port on which the Express server listens | `3000` |
+| `DB_HOST` | MySQL database server hostname | `localhost` |
+| `DB_PORT` | MySQL database server port | `3306` |
+| `DB_USER` | MySQL database user | `root` |
+| `DB_PASSWORD` | MySQL database password | *(your local password)* |
+| `DB_NAME` | MySQL database name | `task_management_db` |
+| `JWT_SECRET` | Secret key used to sign and verify JSON Web Tokens | *(a secure random string)* |
+| `JWT_EXPIRES_IN` | Token expiration period | `1d` |
 
-> **Never commit your `.env` file.** It is excluded by `.gitignore`.
+> **Security Note:** The `.env` file is excluded from Git tracking via `.gitignore`. Never commit credentials to version control.
 
-### 4. Create the Database
+---
 
-Log in to MySQL and create the database:
+## Database Migrations & Seeders
 
-```sql
-CREATE DATABASE task_management_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-### 5. Run Migrations
-
-Creates the `users` and `tasks` tables (and the internal `database_migrations` tracking table):
-
+### 1. Run Migrations
+Applies pending SQL schema definitions and initializes `database_migrations` tracking:
 ```bash
 npm run migrate
 ```
+*Creates the `users` and `tasks` tables with proper primary keys, foreign key constraints, indexes, and timestamps.*
 
-Expected output:
-```
-Connected to database.
-Running 2 pending migration(s)…
-  → Applying: 001_create_users_table.js
-  ✓ Applied:  001_create_users_table.js
-  → Applying: 002_create_tasks_table.js
-  ✓ Applied:  002_create_tasks_table.js
-All pending migrations applied successfully.
-```
-
-Migrations are **idempotent** — re-running `npm run migrate` skips already-applied migrations.
-
-### 6. Run Seeders
-
-Inserts one admin user and one regular user with hashed passwords:
-
+### 2. Run Seeders
+Populates the database with initial development accounts and initializes `database_seeders` tracking:
 ```bash
 npm run seed
 ```
+*Creates one seeded `admin` account and one seeded `user` account with hashed passwords.*
 
-Expected output:
-```
-Connected to database.
-Running 1 pending seeder(s)…
-  → Running: 001_seed_users.js
-  ✓ Done:    001_seed_users.js
-All pending seeders applied successfully.
-```
+Both commands are **idempotent** — subsequent executions automatically skip previously applied migrations and seeders.
 
-Seeded credentials (for development only):
+---
 
-| Role  | Email               | Password    |
-|-------|---------------------|-------------|
-| admin | admin@example.com   | Admin@1234  |
-| user  | user@example.com    | User@1234   |
+## Running the Application
 
-> **Change these credentials** before deploying to any real environment.
-
-### 7. Start the Server
-
+### Start Production Server
 ```bash
 npm start
 ```
 
-Or, with file-watching for development (Node.js ≥ 18):
-
+### Start Development Server (with Auto-Reload)
 ```bash
 npm run dev
 ```
 
-Visit `http://localhost:3000` — you should see:
+Upon successful startup, the console displays:
+```
+Database connection established successfully.
+Server is running on http://localhost:3000
+```
 
+Verify the server is running by opening `http://localhost:3000` in your browser or executing:
+```bash
+curl http://localhost:3000/
+```
+
+Expected response:
 ```json
 {
   "success": true,
@@ -183,16 +247,67 @@ Visit `http://localhost:3000` — you should see:
 
 ---
 
-## API Endpoints
+## API Endpoints Summary
 
 Base URL: `http://localhost:3000`
 
+| Method | Endpoint | Access Level | Description |
+|---|---|---|---|
+| `GET` | `/` | Public | Health-check endpoint confirming server status |
+| `POST` | `/api/auth/register` | Public | Register a new user account (forces role: `user`) |
+| `POST` | `/api/auth/login` | Public | Authenticate user credentials and receive a JWT |
+| `POST` | `/api/tasks` | Authenticated | Create a new task (bound to authenticated user, default status: `Pending`) |
+| `GET` | `/api/tasks` | Authenticated | List tasks with pagination (`user` sees own tasks, `admin` sees all tasks) |
+| `GET` | `/api/tasks/:id` | Authenticated | Retrieve task by ID (`user` accesses own, `admin` accesses any; returns 404 if inaccessible) |
+| `PUT` | `/api/tasks/:id` | Authenticated | Update task title and description (`user` updates own, `admin` updates any) |
+| `PATCH` | `/api/tasks/:id/status` | **Admin Only** | Update task status (`Pending`, `In Progress`, `Testing`, `Completed`) |
+
+---
+
+## Authentication & Authorization
+
+All endpoints under `/api/tasks` are protected by JWT Bearer token authentication.
+
+### Supplying the Token
+Include the JWT in the standard HTTP `Authorization` request header:
+```http
+Authorization: Bearer <your_jwt_token>
+```
+
+### Authentication Errors
+- **Missing Token** (`401 Unauthorized`):
+  ```json
+  { "success": false, "message": "Access denied. No token provided." }
+  ```
+- **Invalid / Expired Token** (`401 Unauthorized`):
+  ```json
+  { "success": false, "message": "Invalid token." }
+  ```
+- **Insufficient Permissions** (`403 Forbidden`):
+  ```json
+  { "success": false, "message": "Access denied. Insufficient permissions." }
+  ```
+
+---
+
+## Task Statuses & Workflow
+
+The `tasks` table enforces an `ENUM` with four valid status states:
+
+1. `Pending` — Default status automatically assigned when a task is created.
+2. `In Progress` — Task is currently being worked on.
+3. `Testing` — Task implementation is complete and undergoing review/testing.
+4. `Completed` — Task is finished.
+
+> **Status Transition Rule:** Only users with the `admin` role are permitted to change a task's status via `PATCH /api/tasks/:id/status`. Regular users cannot modify task status.
+
+---
+
+## Detailed Endpoint Documentation
+
 ### 1. Health Check
-
-Confirm server is running. Does not require authentication or database connection.
-
-- **URL:** `GET /`
-- **Headers:** None
+- **Endpoint:** `GET /`
+- **Access:** Public
 - **Response (200 OK):**
   ```json
   {
@@ -202,25 +317,25 @@ Confirm server is running. Does not require authentication or database connectio
   }
   ```
 
-### 2. User Registration
+---
 
-Registers a new user account. Passwords are automatically hashed using bcryptjs. The `role` is strictly assigned as `"user"` (public registration cannot create admins).
-
-- **URL:** `POST /api/auth/register`
+### 2. Register User
+- **Endpoint:** `POST /api/auth/register`
+- **Access:** Public
 - **Headers:** `Content-Type: application/json`
 - **Request Body:**
   ```json
   {
     "name": "Jane Doe",
     "email": "jane@example.com",
-    "password": "password123"
+    "password": "Password123"
   }
   ```
 - **Validation Rules:**
   - `name`: Required, non-empty string.
-  - `email`: Required, valid email format, must be unique.
+  - `email`: Required, valid email format, unique across users.
   - `password`: Required, minimum 6 characters.
-  - `role`: Automatically forced to `"user"`.
+  - `role`: Automatically assigned to `'user'` (any role provided in the body is ignored).
 - **Response (201 Created):**
   ```json
   {
@@ -236,34 +351,21 @@ Registers a new user account. Passwords are automatically hashed using bcryptjs.
     }
   }
   ```
-- **Error Responses:**
-  - `400 Bad Request` — Missing fields, blank values, invalid email format, or password < 6 characters.
-    ```json
-    { "success": false, "message": "name, email, and password are required." }
-    ```
-  - `409 Conflict` — Email already registered.
-    ```json
-    { "success": false, "message": "An account with that email already exists." }
-    ```
+- **Common Errors:**
+  - `400 Bad Request`: Missing fields, invalid email format, or short password.
+  - `409 Conflict`: Email already registered.
 
-- **cURL Example:**
-  ```bash
-  curl -X POST http://localhost:3000/api/auth/register \
-    -H "Content-Type: application/json" \
-    -d "{\"name\":\"Jane Doe\",\"email\":\"jane@example.com\",\"password\":\"password123\"}"
-  ```
+---
 
 ### 3. User Login
-
-Authenticates user credentials and issues a signed JSON Web Token (JWT). Never exposes password hashes.
-
-- **URL:** `POST /api/auth/login`
+- **Endpoint:** `POST /api/auth/login`
+- **Access:** Public
 - **Headers:** `Content-Type: application/json`
 - **Request Body:**
   ```json
   {
     "email": "jane@example.com",
-    "password": "password123"
+    "password": "Password123"
   }
   ```
 - **Response (200 OK):**
@@ -282,59 +384,30 @@ Authenticates user credentials and issues a signed JSON Web Token (JWT). Never e
     }
   }
   ```
-- **Error Responses:**
-  - `400 Bad Request` — Missing email or password.
-    ```json
-    { "success": false, "message": "email and password are required." }
-    ```
-  - `401 Unauthorized` — Invalid email or incorrect password.
-    ```json
-    { "success": false, "message": "Invalid email or password." }
-    ```
+- **Common Errors:**
+  - `400 Bad Request`: Missing email or password.
+  - `401 Unauthorized`: Invalid email or incorrect password (generic message prevents user enumeration).
 
-- **cURL Example:**
-  ```bash
-  curl -X POST http://localhost:3000/api/auth/login \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"jane@example.com\",\"password\":\"password123\"}"
-  ```
+---
 
-### 4. Authentication Middleware
-
-Protected endpoints require a valid JWT passed in the `Authorization` HTTP header using the `Bearer` scheme.
-
-```http
-Authorization: Bearer <your_jwt_token>
-```
-
-- Missing token (`401 Unauthorized`):
-  ```json
-  { "success": false, "message": "Access denied. No token provided." }
-  ```
-- Invalid / Malformed token (`401 Unauthorized`):
-  ```json
-  { "success": false, "message": "Invalid token." }
-  ```
-
-### 5. Create Task
-
-Creates a new task bound strictly to the authenticated user. Even if a `user_id` is supplied in the request body, it is ignored and replaced with the authenticated user's ID. Initial status defaults to `"Pending"`.
-
-- **URL:** `POST /api/tasks`
-- **Authorization:** `Bearer <token>` (Any authenticated user)
-- **Headers:** `Content-Type: application/json`
+### 4. Create Task
+- **Endpoint:** `POST /api/tasks`
+- **Access:** Authenticated (Any role)
+- **Headers:**
+  - `Authorization: Bearer <token>`
+  - `Content-Type: application/json`
 - **Request Body:**
   ```json
   {
-    "title": "Complete assessment report",
-    "description": "Finalize documentation and run tests."
+    "title": "Set up production monitoring",
+    "description": "Configure health checks and alert notifications."
   }
   ```
 - **Validation Rules:**
-  - `title`: Required, non-empty string, maximum 200 characters.
+  - `title`: Required, non-empty, max 200 characters.
   - `description`: Optional text.
-  - `user_id`: Ignored if provided in body; bound to `req.user.id`.
-  - `status`: Ignored if provided in body; defaulted to `"Pending"`.
+  - `user_id`: Automatically set to `req.user.id` (any client-supplied `user_id` is ignored).
+  - `status`: Automatically set to `'Pending'` (any client-supplied status is ignored).
 - **Response (201 Created):**
   ```json
   {
@@ -344,8 +417,8 @@ Creates a new task bound strictly to the authenticated user. Even if a `user_id`
       "task": {
         "id": 1,
         "user_id": 2,
-        "title": "Complete assessment report",
-        "description": "Finalize documentation and run tests.",
+        "title": "Set up production monitoring",
+        "description": "Configure health checks and alert notifications.",
         "status": "Pending",
         "created_at": "2026-10-09T08:57:29.000Z",
         "updated_at": "2026-10-09T08:57:29.000Z"
@@ -353,29 +426,19 @@ Creates a new task bound strictly to the authenticated user. Even if a `user_id`
     }
   }
   ```
-- **Error Responses:**
-  - `400 Bad Request` — Missing or blank title.
-  - `401 Unauthorized` — Missing or invalid token.
 
-- **cURL Example:**
-  ```bash
-  curl -X POST http://localhost:3000/api/tasks \
-    -H "Authorization: Bearer <your_jwt_token>" \
-    -H "Content-Type: application/json" \
-    -d "{\"title\":\"Write documentation\",\"description\":\"Detail all endpoints.\"}"
-  ```
+---
 
-### 6. List Tasks (with Pagination)
-
-Retrieves a paginated list of tasks.
-- **Regular users** only see tasks they own (`user_id = req.user.id`).
-- **Admins** see tasks across all users.
-
-- **URL:** `GET /api/tasks?page=1&limit=10`
-- **Authorization:** `Bearer <token>` (Any authenticated user)
+### 5. List Tasks (with Pagination)
+- **Endpoint:** `GET /api/tasks?page=1&limit=10`
+- **Access:** Authenticated (Any role)
+- **Headers:** `Authorization: Bearer <token>`
 - **Query Parameters:**
-  - `page` (optional, integer, default: 1)
-  - `limit` (optional, integer, default: 10, max: 100)
+  - `page`: Page number (default: `1`, minimum: `1`).
+  - `limit`: Number of tasks per page (default: `10`, maximum: `100`).
+- **Access Scope:**
+  - Regular users only see tasks they own (`WHERE user_id = req.user.id`).
+  - Administrators see all tasks across all users.
 - **Response (200 OK):**
   ```json
   {
@@ -386,8 +449,8 @@ Retrieves a paginated list of tasks.
         {
           "id": 1,
           "user_id": 2,
-          "title": "Complete assessment report",
-          "description": "Finalize documentation and run tests.",
+          "title": "Set up production monitoring",
+          "description": "Configure health checks and alert notifications.",
           "status": "Pending",
           "created_at": "2026-10-09T08:57:29.000Z",
           "updated_at": "2026-10-09T08:57:29.000Z"
@@ -402,23 +465,17 @@ Retrieves a paginated list of tasks.
     }
   }
   ```
-- **Error Responses:**
-  - `401 Unauthorized` — Missing or invalid token.
 
-- **cURL Example:**
-  ```bash
-  curl -X GET "http://localhost:3000/api/tasks?page=1&limit=10" \
-    -H "Authorization: Bearer <your_jwt_token>"
-  ```
+---
 
-### 7. Get Task by ID
-
-Retrieves details of a single task.
-- **Regular users** can retrieve only their own tasks. Inaccessible tasks return `404` to prevent resource enumeration.
-- **Admins** can retrieve any task.
-
-- **URL:** `GET /api/tasks/:id`
-- **Authorization:** `Bearer <token>` (Any authenticated user)
+### 6. Get Task by ID
+- **Endpoint:** `GET /api/tasks/:id`
+- **Access:** Authenticated (Any role)
+- **Headers:** `Authorization: Bearer <token>`
+- **Access Scope:**
+  - Regular users can access only their own tasks.
+  - If a regular user attempts to access a task owned by someone else, the API returns `404 Not Found` (avoids resource disclosure).
+  - Administrators can access any task by ID.
 - **Response (200 OK):**
   ```json
   {
@@ -428,8 +485,8 @@ Retrieves details of a single task.
       "task": {
         "id": 1,
         "user_id": 2,
-        "title": "Complete assessment report",
-        "description": "Finalize documentation and run tests.",
+        "title": "Set up production monitoring",
+        "description": "Configure health checks and alert notifications.",
         "status": "Pending",
         "created_at": "2026-10-09T08:57:29.000Z",
         "updated_at": "2026-10-09T08:57:29.000Z"
@@ -437,33 +494,29 @@ Retrieves details of a single task.
     }
   }
   ```
-- **Error Responses:**
-  - `401 Unauthorized` — Missing or invalid token.
-  - `404 Not Found` — Task does not exist or belongs to another user.
+- **Common Errors:**
+  - `404 Not Found`: Task does not exist or belongs to another user.
 
-- **cURL Example:**
-  ```bash
-  curl -X GET http://localhost:3000/api/tasks/1 \
-    -H "Authorization: Bearer <your_jwt_token>"
-  ```
+---
 
-### 8. Update Task
-
-Updates `title` and `description` of a task.
-- **Regular users** can edit only tasks they own.
-- **Admins** can edit any task.
-- Cannot change `user_id` or `status` via this endpoint.
-
-- **URL:** `PUT /api/tasks/:id`
-- **Authorization:** `Bearer <token>` (Any authenticated user)
-- **Headers:** `Content-Type: application/json`
+### 7. Update Task
+- **Endpoint:** `PUT /api/tasks/:id`
+- **Access:** Authenticated (Any role)
+- **Headers:**
+  - `Authorization: Bearer <token>`
+  - `Content-Type: application/json`
 - **Request Body:**
   ```json
   {
-    "title": "Updated assessment title",
-    "description": "Updated description text."
+    "title": "Set up production monitoring - Revised",
+    "description": "Include Discord and email alerts."
   }
   ```
+- **Rules:**
+  - Updates only `title` and `description`.
+  - Regular users can only update tasks they own (returns `404 Not Found` if task belongs to another user).
+  - Administrators can update tasks belonging to any user.
+  - Cannot alter `user_id` or `status` via this endpoint.
 - **Response (200 OK):**
   ```json
   {
@@ -473,42 +526,31 @@ Updates `title` and `description` of a task.
       "task": {
         "id": 1,
         "user_id": 2,
-        "title": "Updated assessment title",
-        "description": "Updated description text.",
+        "title": "Set up production monitoring - Revised",
+        "description": "Include Discord and email alerts.",
         "status": "Pending",
         "created_at": "2026-10-09T08:57:29.000Z",
-        "updated_at": "2026-10-09T08:58:12.000Z"
+        "updated_at": "2026-10-09T09:12:45.000Z"
       }
     }
   }
   ```
-- **Error Responses:**
-  - `400 Bad Request` — Missing or blank title.
-  - `401 Unauthorized` — Missing or invalid token.
-  - `404 Not Found` — Task does not exist or belongs to another user.
 
-- **cURL Example:**
-  ```bash
-  curl -X PUT http://localhost:3000/api/tasks/1 \
-    -H "Authorization: Bearer <your_jwt_token>" \
-    -H "Content-Type: application/json" \
-    -d "{\"title\":\"Updated title\",\"description\":\"New description.\"}"
-  ```
+---
 
-### 9. Update Task Status (Admin Only)
-
-Updates a task's status. Restricted strictly to users with the `admin` role.
-
-- **URL:** `PATCH /api/tasks/:id/status`
-- **Authorization:** `Bearer <admin_jwt_token>` (Admin role only)
-- **Headers:** `Content-Type: application/json`
+### 8. Update Task Status
+- **Endpoint:** `PATCH /api/tasks/:id/status`
+- **Access:** **Administrator Only** (`role: admin`)
+- **Headers:**
+  - `Authorization: Bearer <admin_jwt_token>`
+  - `Content-Type: application/json`
 - **Request Body:**
   ```json
   {
     "status": "In Progress"
   }
   ```
-- **Allowed Statuses:** `Pending`, `In Progress`, `Testing`, `Completed`.
+- **Allowed Statuses:** `Pending`, `In Progress`, `Testing`, `Completed`
 - **Response (200 OK):**
   ```json
   {
@@ -518,165 +560,120 @@ Updates a task's status. Restricted strictly to users with the `admin` role.
       "task": {
         "id": 1,
         "user_id": 2,
-        "title": "Updated assessment title",
-        "description": "Updated description text.",
+        "title": "Set up production monitoring - Revised",
+        "description": "Include Discord and email alerts.",
         "status": "In Progress",
         "created_at": "2026-10-09T08:57:29.000Z",
-        "updated_at": "2026-10-09T08:59:05.000Z"
+        "updated_at": "2026-10-09T09:15:30.000Z"
       }
     }
   }
   ```
-- **Error Responses:**
-  - `400 Bad Request` — Status is missing or not one of the allowed values.
-  - `401 Unauthorized` — Missing or invalid token.
-  - `403 Forbidden` — Authenticated as regular user (`role: user`).
-  - `404 Not Found` — Task does not exist.
-
-- **cURL Example:**
-  ```bash
-  curl -X PATCH http://localhost:3000/api/tasks/1/status \
-    -H "Authorization: Bearer <admin_jwt_token>" \
-    -H "Content-Type: application/json" \
-    -d "{\"status\":\"Completed\"}"
-  ```
+- **Common Errors:**
+  - `400 Bad Request`: Status value is missing or not one of the allowed four statuses.
+  - `403 Forbidden`: Authenticated user is not an administrator.
+  - `404 Not Found`: Task does not exist.
 
 ---
 
-## Postman Collection
+## Seeded Development Credentials
 
-An importable Postman collection is provided at:
+The seeder (`database/seeders/001_seed_users.js`) automatically provisions two development accounts. Passwords are saved as secure bcrypt hashes. Evaluators can use these accounts to verify role-based permissions immediately:
+
+| Role | Email | Password | Allowed Capabilities |
+|---|---|---|---|
+| **admin** | `admin@example.com` | `Admin@1234` | Full access: View & edit any user's tasks, update task status |
+| **user** | `user@example.com` | `User@1234` | Regular access: Create tasks, view & edit only own tasks |
+
+> **Security Note:** In a production environment, seeded credentials should be changed or removed immediately after deployment.
+
+---
+
+## Postman Collection Guide
+
+An importable, pre-configured Postman collection is included in the repository at:
 [`postman/Task-Management-System.postman_collection.json`](file:///c:/Users/Admin/Desktop/TASK-MANAGEMENT-SYSTEM/postman/Task-Management-System.postman_collection.json)
 
-### Importing into Postman
-1. Open Postman.
-2. Click **Import** (top-left).
-3. Select or drag-and-drop [`postman/Task-Management-System.postman_collection.json`](file:///c:/Users/Admin/Desktop/TASK-MANAGEMENT-SYSTEM/postman/Task-Management-System.postman_collection.json).
-4. The **Task Management System API** collection will appear in your workspace.
+### Importing the Collection
+1. Launch **Postman**.
+2. Click **Import** in the upper-left corner.
+3. Select or drag-and-drop `postman/Task-Management-System.postman_collection.json`.
+4. The collection **Task Management System API** will appear in your workspace.
 
 ### Collection Variables
+The collection defines variables that dynamically manage state across requests:
 
 | Variable | Default Value | Description |
 |---|---|---|
-| `baseUrl` | `http://localhost:3000` | Target API host and port |
-| `adminToken` | *(Dynamic)* | JWT token automatically captured on Admin Login |
-| `userToken` | *(Dynamic)* | JWT token automatically captured on User Login |
-| `taskId` | `1` *(Dynamic)* | ID of task owned by regular user (captured on create) |
-| `otherTaskId` | `2` *(Dynamic)* | ID of task owned by admin / another user |
+| `baseUrl` | `http://localhost:3000` | Target server URL |
+| `adminToken` | *(Dynamic)* | Automatically populated upon Admin Login |
+| `userToken` | *(Dynamic)* | Automatically populated upon User Login |
+| `taskId` | `1` *(Dynamic)* | Automatically populated when regular user creates a task |
+| `otherTaskId` | `2` *(Dynamic)* | Automatically populated for cross-user permission checks |
 
-### Automated Scripts & Tests
-- **Automatic Token Storage**: Logging in as admin or user automatically captures and stores tokens in collection and environment variables.
-- **Dynamic Task Linking**: Creating a task as regular user stores `taskId` for subsequent retrieval and update tests.
-- **Pre-configured Assertions**: Each request includes tests verifying status codes, payload structures, role access control, and error handling.
+### Running the Collection
+- **Automated Token Capture**: Running `04 - Login as the seeded admin` or `05 - Login as the seeded regular user` automatically extracts the JWT token from the response and saves it to `adminToken` and `userToken`.
+- **Automated Task Linking**: Running `07 - Create a task as a regular user` stores the newly generated task ID in `taskId`.
+- **Collection Runner**: You can execute the entire collection sequentially via Postman's **Run collection** feature. All 20 requests and health checks pass out-of-the-box.
 
-### Included Test Requests (20 Scenarios + Health Check)
-1. **Health Check**: `GET /` — Confirms server is online.
-2. **01 - Register a regular user**: `POST /api/auth/register` — Successful registration with role `user`.
-3. **02 - Register with missing fields**: `POST /api/auth/register` — Returns 400 Bad Request.
-4. **03 - Attempt duplicate registration**: `POST /api/auth/register` — Returns 409 Conflict.
-5. **04 - Login as the seeded admin**: `POST /api/auth/login` — Returns 200 and captures `adminToken`.
-6. **05 - Login as the seeded regular user**: `POST /api/auth/login` — Returns 200 and captures `userToken`.
-7. **06 - Login with invalid credentials**: `POST /api/auth/login` — Returns 401 Unauthorized.
-8. **07 - Create a task as a regular user**: `POST /api/tasks` — Returns 201, status defaults to `Pending`, captures `taskId`.
-9. **08 - List tasks as a regular user**: `GET /api/tasks` — Returns only owned tasks with pagination.
-10. **09 - Retrieve a task by ID**: `GET /api/tasks/:id` — Returns owned task details.
-11. **10 - Update an owned task**: `PUT /api/tasks/:id` — Updates title and description.
-12. **Setup - Create task as admin**: `POST /api/tasks` — Captures `otherTaskId` for cross-access tests.
-13. **11 - Attempt to retrieve another user's task**: `GET /api/tasks/:id` — Returns 404 (prevents resource disclosure).
-14. **12 - Attempt to edit another user's task**: `PUT /api/tasks/:id` — Returns 404 Not Found.
-15. **13 - Attempt to create a task with a spoofed user_id**: `POST /api/tasks` — Body `user_id` and `status` ignored.
-16. **14 - List tasks as admin**: `GET /api/tasks` — Returns all tasks across all users.
-17. **15 - Retrieve another user's task as admin**: `GET /api/tasks/:id` — Admin successfully accesses task.
-18. **16 - Edit another user's task as admin**: `PUT /api/tasks/:id` — Admin successfully edits task.
-19. **17 - Attempt to update task status as a regular user**: `PATCH /api/tasks/:id/status` — Returns 403 Forbidden.
-20. **18 - Update task status as admin**: `PATCH /api/tasks/:id/status` — Status updated to `In Progress`.
-21. **19 - Attempt an invalid task status**: `PATCH /api/tasks/:id/status` — Returns 400 Bad Request.
-22. **20 - Attempt to access a protected endpoint without a token**: `GET /api/tasks` — Returns 401 Unauthorized.
+### Covered Requests
+1. `GET /` — Health Check
+2. `POST /api/auth/register` — 01: Register regular user
+3. `POST /api/auth/register` — 02: Register with missing fields (expects 400)
+4. `POST /api/auth/register` — 03: Duplicate registration (expects 409)
+5. `POST /api/auth/login` — 04: Login as seeded admin (saves `adminToken`)
+6. `POST /api/auth/login` — 05: Login as seeded regular user (saves `userToken`)
+7. `POST /api/auth/login` — 06: Login with invalid credentials (expects 401)
+8. `POST /api/tasks` — 07: Create task as regular user (saves `taskId`)
+9. `GET /api/tasks` — 08: List tasks as regular user (only own tasks)
+10. `GET /api/tasks/:id` — 09: Retrieve task by ID
+11. `PUT /api/tasks/:id` — 10: Update owned task
+12. `POST /api/tasks` — Setup: Create task as admin (saves `otherTaskId`)
+13. `GET /api/tasks/:id` — 11: Attempt retrieve another user's task (expects 404)
+14. `PUT /api/tasks/:id` — 12: Attempt edit another user's task (expects 404)
+15. `POST /api/tasks` — 13: Attempt create task with spoofed `user_id` (verifies spoof ignored)
+16. `GET /api/tasks` — 14: List tasks as admin (sees all tasks across users)
+17. `GET /api/tasks/:id` — 15: Retrieve another user's task as admin (allowed)
+18. `PUT /api/tasks/:id` — 16: Edit another user's task as admin (allowed)
+19. `PATCH /api/tasks/:id/status` — 17: Attempt status update as regular user (expects 403)
+20. `PATCH /api/tasks/:id/status` — 18: Update status as admin (expects 200)
+21. `PATCH /api/tasks/:id/status` — 19: Attempt invalid status (expects 400)
+22. `GET /api/tasks` — 20: Attempt access protected route without token (expects 401)
 
 ---
 
-## Assumptions and Design Decisions
+## Security Notes & Design Decisions
 
 1. **Stateless JWT Bearer Authentication**:
-   - Authentication relies strictly on standard `Authorization: Bearer <token>` headers.
-   - Cookies and server-side sessions are excluded to maintain stateless horizontal scalability.
+   - The API relies strictly on standard HTTP `Authorization: Bearer <token>` headers.
+   - Cookies and server sessions were intentionally excluded to allow horizontal scaling without state persistence.
 
-2. **Strict Layered Separation of Concerns**:
-   - `Routes`: Declare URL paths and bind middleware.
-   - `Controllers`: Parse HTTP requests, delegate to services, format JSON responses.
-   - `Services`: Encapsulate domain business logic, data validation, and permission checks.
-   - `Models`: Contain all SQL statements with parameterized queries using `mysql2`.
-   - `Middleware`: Authentication (`authenticate`), role authorization (`authorize`), and centralized error handling.
+2. **Privacy-Preserving 404 Responses**:
+   - When a user attempts to view or update a task owned by someone else, the API returns `404 Not Found` rather than `403 Forbidden`.
+   - This prevents attackers from guessing sequential task IDs to discover whether private resources exist.
 
-3. **Privacy-Preserving 404 Errors**:
-   - When a regular user attempts to retrieve or edit a task owned by another user, the API responds with `404 Not Found` rather than `403 Forbidden`.
-   - This prevents malicious callers from enumerating task IDs and discovering whether specific tasks exist.
+3. **Protection Against Privilege Escalation**:
+   - `POST /api/auth/register` explicitly hardcodes `role: 'user'` when inserting rows. Public registrations cannot specify an `admin` role.
+   - `POST /api/tasks` binds `user_id` strictly from `req.user.id` extracted from the verified JWT, ignoring any `user_id` submitted in the request body.
 
-4. **Task Ownership and Default Status Integrity**:
-   - Public task creation (`POST /api/tasks`) forces `user_id` to `req.user.id` and `status` to `'Pending'`.
-   - Any client-provided `user_id` or `status` in the request body is intentionally ignored.
+4. **Strict Separation of Task Updates**:
+   - `PUT /api/tasks/:id` is scoped strictly to content editing (`title` and `description`). It cannot reassign task ownership or update status.
+   - `PATCH /api/tasks/:id/status` is the sole endpoint permitted to change status and is restricted to administrators.
 
-5. **Separation of Task Content Editing and Status Transitions**:
-   - `PUT /api/tasks/:id` only allows modifying `title` and `description`. It cannot alter `user_id` or `status`.
-   - Status changes are strictly managed through `PATCH /api/tasks/:id/status`, which is reserved exclusively for users with the `admin` role.
+5. **SQL Injection Defense**:
+   - Every database query uses prepared parameterized statements (`?` placeholders). User input is never concatenated directly into SQL queries.
 
-6. **Restricted Public Registration**:
-   - `POST /api/auth/register` automatically assigns the `'user'` role.
-   - Administrative accounts cannot be created through the public API; they are provisioned via database seeders.
+6. **Centralized Error Handling**:
+   - Database connection errors and uncaught exceptions are caught by [`src/middleware/errorHandler.js`](file:///c:/Users/Admin/Desktop/TASK-MANAGEMENT-SYSTEM/src/middleware/errorHandler.js).
+   - Internal stack traces are logged server-side and never leaked to API clients.
 
 ---
 
 ## npm Scripts
 
-| Script          | Command                   | Description                          |
-|-----------------|---------------------------|--------------------------------------|
-| `npm start`     | `node src/server.js`      | Start the production server          |
-| `npm run dev`   | `node --watch src/server.js` | Start with auto-reload (Node ≥ 18) |
-| `npm run migrate` | `node scripts/migrate.js` | Apply pending database migrations   |
-| `npm run seed`  | `node scripts/seed.js`    | Run pending database seeders         |
-
----
-
-## Database Schema
-
-### `users`
-
-| Column     | Type                    | Notes                      |
-|------------|-------------------------|----------------------------|
-| id         | INT UNSIGNED (PK, AI)   |                            |
-| name       | VARCHAR(100)            | Required                   |
-| email      | VARCHAR(150) UNIQUE     | Login identifier           |
-| password   | VARCHAR(255)            | bcrypt hash                |
-| role       | ENUM('admin', 'user')   | Default: `user`            |
-| created_at | TIMESTAMP               | Auto-set on insert         |
-| updated_at | TIMESTAMP               | Auto-updated on change     |
-
-### `tasks`
-
-| Column      | Type                                                        | Notes                      |
-|-------------|-------------------------------------------------------------|----------------------------|
-| id          | INT UNSIGNED (PK, AI)                                       |                            |
-| user_id     | INT UNSIGNED (FK → users.id)                                | CASCADE delete/update      |
-| title       | VARCHAR(200)                                                | Required                   |
-| description | TEXT                                                        | Optional                   |
-| status      | ENUM('Pending', 'In Progress', 'Testing', 'Completed')      | Default: `Pending`         |
-| created_at  | TIMESTAMP                                                   | Auto-set on insert         |
-| updated_at  | TIMESTAMP                                                   | Auto-updated on change     |
-
----
-
-## Security Notes
-
-- Passwords are hashed with **bcryptjs** (cost factor 10) — plain-text passwords are never stored.
-- All SQL queries use **parameterized statements** (`?` placeholders) to prevent SQL injection.
-- JWT secrets and database passwords are read from environment variables — never hardcoded.
-- `.env` is excluded from version control via `.gitignore`.
-
----
-
-## Development Stages
-
-- [x] **Stage 1** – Project foundation, database, migrations, seeders
-- [x] **Stage 2** – Authentication (register, login, JWT middleware)
-- [x] **Stage 3** – Task CRUD endpoints
-- [x] **Stage 4** – Postman collection & final verification
+| Script | Command | Description |
+|---|---|---|
+| `npm start` | `node src/server.js` | Starts the production server |
+| `npm run dev` | `node --watch src/server.js` | Starts the server with Node.js built-in file watching (Node ≥ 18) |
+| `npm run migrate` | `node scripts/migrate.js` | Applies pending database migrations |
+| `npm run seed` | `node scripts/seed.js` | Runs database seeders to populate initial users |
