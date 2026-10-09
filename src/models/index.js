@@ -16,8 +16,7 @@
  *   - TaskModel  (task CRUD stage)
  */
 
-// No models to export yet — they will be added per feature stage.
-// This file serves as the established entry point so that services
-// can always import from '../models' regardless of stage.
+const UserModel = require('./user.model');
 
-module.exports = {};
+module.exports = { UserModel };
+

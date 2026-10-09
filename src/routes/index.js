@@ -9,10 +9,6 @@
  *   - Mounts every feature router under its versioned API prefix.
  *   - Exposes the single root health-check endpoint.
  *   - Keeps src/app.js free of per-feature route declarations.
- *
- * All feature routers will be added here in later stages:
- *   router.use('/api/auth',  require('./auth.routes'));
- *   router.use('/api/tasks', require('./task.routes'));
  */
 
 const router = require('express').Router();
@@ -27,6 +23,10 @@ router.get('/', (req, res) => {
   });
 });
 
-// Feature routers will be mounted here in later stages.
+// ── Feature routers ──────────────────────────────────────────────────────────
+router.use('/api/auth', require('./auth.routes'));
+
+// Task routes will be mounted here in Stage 3:
+//   router.use('/api/tasks', require('./task.routes'));
 
 module.exports = router;

@@ -25,12 +25,23 @@ A RESTful Task Management API built with **Node.js**, **Express.js**, and **MySQ
 task-management-system/
   src/
     config/
-      db.js            # MySQL connection pool
-    controllers/       # Route handler logic (added in later stages)
-    middleware/        # Auth & validation middleware (added in later stages)
-    routes/            # Express routers (added in later stages)
-    app.js             # Express app setup
-    server.js          # Server entry point
+      db.js                  # MySQL connection pool
+    controllers/
+      auth.controller.js     # HTTP request & response handling for authentication
+    middleware/
+      auth.middleware.js     # JWT Bearer token authentication & authorization
+      errorHandler.js        # Centralized Express error handler
+    models/
+      index.js               # Central models registry
+      user.model.js          # Parameterized SQL queries for users table
+    routes/
+      index.js               # Central route registry & health endpoint
+      auth.routes.js         # Endpoints: /api/auth/register, /api/auth/login
+    services/
+      index.js               # Central services registry
+      auth.service.js        # Authentication business logic & password hashing
+    app.js                   # Express application setup
+    server.js                # Server entry point & startup
   database/
     migrations/
       001_create_users_table.js
@@ -38,10 +49,10 @@ task-management-system/
     seeders/
       001_seed_users.js
   scripts/
-    migrate.js         # Versioned migration runner
-    seed.js            # Seeder runner
-  postman/             # Postman collection (added in later stages)
-  .env.example         # Environment variable template
+    migrate.js               # Versioned migration runner
+    seed.js                  # Seeder runner
+  postman/                   # Postman collection (added in later stages)
+  .env.example               # Environment variable template
   .gitignore
   package.json
   README.md
@@ -167,6 +178,141 @@ Visit `http://localhost:3000` — you should see:
 
 ---
 
+## API Endpoints
+
+Base URL: `http://localhost:3000`
+
+### 1. Health Check
+
+Confirm server is running. Does not require authentication or database connection.
+
+- **URL:** `GET /`
+- **Headers:** None
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Task Management System API is running.",
+    "version": "1.0.0"
+  }
+  ```
+
+### 2. User Registration
+
+Registers a new user account. Passwords are automatically hashed using bcryptjs. The `role` is strictly assigned as `"user"` (public registration cannot create admins).
+
+- **URL:** `POST /api/auth/register`
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+  ```json
+  {
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "password": "password123"
+  }
+  ```
+- **Validation Rules:**
+  - `name`: Required, non-empty string.
+  - `email`: Required, valid email format, must be unique.
+  - `password`: Required, minimum 6 characters.
+  - `role`: Automatically forced to `"user"`.
+- **Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Registration successful.",
+    "data": {
+      "user": {
+        "id": 1,
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "role": "user"
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request` — Missing fields, blank values, invalid email format, or password < 6 characters.
+    ```json
+    { "success": false, "message": "name, email, and password are required." }
+    ```
+  - `409 Conflict` — Email already registered.
+    ```json
+    { "success": false, "message": "An account with that email already exists." }
+    ```
+
+- **cURL Example:**
+  ```bash
+  curl -X POST http://localhost:3000/api/auth/register \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"Jane Doe\",\"email\":\"jane@example.com\",\"password\":\"password123\"}"
+  ```
+
+### 3. User Login
+
+Authenticates user credentials and issues a signed JSON Web Token (JWT). Never exposes password hashes.
+
+- **URL:** `POST /api/auth/login`
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+  ```json
+  {
+    "email": "jane@example.com",
+    "password": "password123"
+  }
+  ```
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Login successful.",
+    "data": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "id": 1,
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "role": "user"
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request` — Missing email or password.
+    ```json
+    { "success": false, "message": "email and password are required." }
+    ```
+  - `401 Unauthorized` — Invalid email or incorrect password.
+    ```json
+    { "success": false, "message": "Invalid email or password." }
+    ```
+
+- **cURL Example:**
+  ```bash
+  curl -X POST http://localhost:3000/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"jane@example.com\",\"password\":\"password123\"}"
+  ```
+
+### 4. Authentication Middleware
+
+Protected endpoints require a valid JWT passed in the `Authorization` HTTP header using the `Bearer` scheme.
+
+```http
+Authorization: Bearer <your_jwt_token>
+```
+
+- Missing token (`401 Unauthorized`):
+  ```json
+  { "success": false, "message": "Access denied. No token provided." }
+  ```
+- Invalid / Malformed token (`401 Unauthorized`):
+  ```json
+  { "success": false, "message": "Invalid token." }
+  ```
+
+---
+
 ## npm Scripts
 
 | Script          | Command                   | Description                          |
@@ -218,7 +364,7 @@ Visit `http://localhost:3000` — you should see:
 ## Development Stages
 
 - [x] **Stage 1** – Project foundation, database, migrations, seeders
-- [ ] **Stage 2** – Authentication (register, login, JWT middleware)
+- [x] **Stage 2** – Authentication (register, login, JWT middleware)
 - [ ] **Stage 3** – Task CRUD endpoints
 - [ ] **Stage 4** – Role-based access control
 - [ ] **Stage 5** – Postman collection & final documentation

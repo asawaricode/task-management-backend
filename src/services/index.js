@@ -16,8 +16,7 @@
  *   - TaskService  (task CRUD stage)
  */
 
-// No services to export yet — they will be added per feature stage.
-// This file serves as the established entry point so that controllers
-// can always import from '../services' regardless of stage.
+const AuthService = require('./auth.service');
 
-module.exports = {};
+module.exports = { AuthService };
+
