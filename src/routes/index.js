@@ -25,8 +25,6 @@ router.get('/', (req, res) => {
 
 // ── Feature routers ──────────────────────────────────────────────────────────
 router.use('/api/auth', require('./auth.routes'));
-
-// Task routes will be mounted here in Stage 3:
-//   router.use('/api/tasks', require('./task.routes'));
+router.use('/api/tasks', require('./task.routes'));
 
 module.exports = router;

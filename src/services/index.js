@@ -17,6 +17,7 @@
  */
 
 const AuthService = require('./auth.service');
+const TaskService = require('./task.service');
 
-module.exports = { AuthService };
+module.exports = { AuthService, TaskService };
 

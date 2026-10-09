@@ -28,18 +28,22 @@ task-management-system/
       db.js                  # MySQL connection pool
     controllers/
       auth.controller.js     # HTTP request & response handling for authentication
+      task.controller.js     # HTTP request & response handling for tasks
     middleware/
       auth.middleware.js     # JWT Bearer token authentication & authorization
       errorHandler.js        # Centralized Express error handler
     models/
       index.js               # Central models registry
       user.model.js          # Parameterized SQL queries for users table
+      task.model.js          # Parameterized SQL queries for tasks table
     routes/
       index.js               # Central route registry & health endpoint
       auth.routes.js         # Endpoints: /api/auth/register, /api/auth/login
+      task.routes.js         # Endpoints: /api/tasks CRUD & status
     services/
       index.js               # Central services registry
       auth.service.js        # Authentication business logic & password hashing
+      task.service.js        # Task business logic, validation & ownership checks
     app.js                   # Express application setup
     server.js                # Server entry point & startup
   database/
@@ -311,6 +315,231 @@ Authorization: Bearer <your_jwt_token>
   { "success": false, "message": "Invalid token." }
   ```
 
+### 5. Create Task
+
+Creates a new task bound strictly to the authenticated user. Even if a `user_id` is supplied in the request body, it is ignored and replaced with the authenticated user's ID. Initial status defaults to `"Pending"`.
+
+- **URL:** `POST /api/tasks`
+- **Authorization:** `Bearer <token>` (Any authenticated user)
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+  ```json
+  {
+    "title": "Complete assessment report",
+    "description": "Finalize documentation and run tests."
+  }
+  ```
+- **Validation Rules:**
+  - `title`: Required, non-empty string, maximum 200 characters.
+  - `description`: Optional text.
+  - `user_id`: Ignored if provided in body; bound to `req.user.id`.
+  - `status`: Ignored if provided in body; defaulted to `"Pending"`.
+- **Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Task created successfully.",
+    "data": {
+      "task": {
+        "id": 1,
+        "user_id": 2,
+        "title": "Complete assessment report",
+        "description": "Finalize documentation and run tests.",
+        "status": "Pending",
+        "created_at": "2026-10-09T08:57:29.000Z",
+        "updated_at": "2026-10-09T08:57:29.000Z"
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request` — Missing or blank title.
+  - `401 Unauthorized` — Missing or invalid token.
+
+- **cURL Example:**
+  ```bash
+  curl -X POST http://localhost:3000/api/tasks \
+    -H "Authorization: Bearer <your_jwt_token>" \
+    -H "Content-Type: application/json" \
+    -d "{\"title\":\"Write documentation\",\"description\":\"Detail all endpoints.\"}"
+  ```
+
+### 6. List Tasks (with Pagination)
+
+Retrieves a paginated list of tasks.
+- **Regular users** only see tasks they own (`user_id = req.user.id`).
+- **Admins** see tasks across all users.
+
+- **URL:** `GET /api/tasks?page=1&limit=10`
+- **Authorization:** `Bearer <token>` (Any authenticated user)
+- **Query Parameters:**
+  - `page` (optional, integer, default: 1)
+  - `limit` (optional, integer, default: 10, max: 100)
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Tasks retrieved successfully.",
+    "data": {
+      "tasks": [
+        {
+          "id": 1,
+          "user_id": 2,
+          "title": "Complete assessment report",
+          "description": "Finalize documentation and run tests.",
+          "status": "Pending",
+          "created_at": "2026-10-09T08:57:29.000Z",
+          "updated_at": "2026-10-09T08:57:29.000Z"
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 10,
+        "total": 1,
+        "totalPages": 1
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `401 Unauthorized` — Missing or invalid token.
+
+- **cURL Example:**
+  ```bash
+  curl -X GET "http://localhost:3000/api/tasks?page=1&limit=10" \
+    -H "Authorization: Bearer <your_jwt_token>"
+  ```
+
+### 7. Get Task by ID
+
+Retrieves details of a single task.
+- **Regular users** can retrieve only their own tasks. Inaccessible tasks return `404` to prevent resource enumeration.
+- **Admins** can retrieve any task.
+
+- **URL:** `GET /api/tasks/:id`
+- **Authorization:** `Bearer <token>` (Any authenticated user)
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Task retrieved successfully.",
+    "data": {
+      "task": {
+        "id": 1,
+        "user_id": 2,
+        "title": "Complete assessment report",
+        "description": "Finalize documentation and run tests.",
+        "status": "Pending",
+        "created_at": "2026-10-09T08:57:29.000Z",
+        "updated_at": "2026-10-09T08:57:29.000Z"
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `401 Unauthorized` — Missing or invalid token.
+  - `404 Not Found` — Task does not exist or belongs to another user.
+
+- **cURL Example:**
+  ```bash
+  curl -X GET http://localhost:3000/api/tasks/1 \
+    -H "Authorization: Bearer <your_jwt_token>"
+  ```
+
+### 8. Update Task
+
+Updates `title` and `description` of a task.
+- **Regular users** can edit only tasks they own.
+- **Admins** can edit any task.
+- Cannot change `user_id` or `status` via this endpoint.
+
+- **URL:** `PUT /api/tasks/:id`
+- **Authorization:** `Bearer <token>` (Any authenticated user)
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+  ```json
+  {
+    "title": "Updated assessment title",
+    "description": "Updated description text."
+  }
+  ```
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Task updated successfully.",
+    "data": {
+      "task": {
+        "id": 1,
+        "user_id": 2,
+        "title": "Updated assessment title",
+        "description": "Updated description text.",
+        "status": "Pending",
+        "created_at": "2026-10-09T08:57:29.000Z",
+        "updated_at": "2026-10-09T08:58:12.000Z"
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request` — Missing or blank title.
+  - `401 Unauthorized` — Missing or invalid token.
+  - `404 Not Found` — Task does not exist or belongs to another user.
+
+- **cURL Example:**
+  ```bash
+  curl -X PUT http://localhost:3000/api/tasks/1 \
+    -H "Authorization: Bearer <your_jwt_token>" \
+    -H "Content-Type: application/json" \
+    -d "{\"title\":\"Updated title\",\"description\":\"New description.\"}"
+  ```
+
+### 9. Update Task Status (Admin Only)
+
+Updates a task's status. Restricted strictly to users with the `admin` role.
+
+- **URL:** `PATCH /api/tasks/:id/status`
+- **Authorization:** `Bearer <admin_jwt_token>` (Admin role only)
+- **Headers:** `Content-Type: application/json`
+- **Request Body:**
+  ```json
+  {
+    "status": "In Progress"
+  }
+  ```
+- **Allowed Statuses:** `Pending`, `In Progress`, `Testing`, `Completed`.
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "message": "Task status updated successfully.",
+    "data": {
+      "task": {
+        "id": 1,
+        "user_id": 2,
+        "title": "Updated assessment title",
+        "description": "Updated description text.",
+        "status": "In Progress",
+        "created_at": "2026-10-09T08:57:29.000Z",
+        "updated_at": "2026-10-09T08:59:05.000Z"
+      }
+    }
+  }
+  ```
+- **Error Responses:**
+  - `400 Bad Request` — Status is missing or not one of the allowed values.
+  - `401 Unauthorized` — Missing or invalid token.
+  - `403 Forbidden` — Authenticated as regular user (`role: user`).
+  - `404 Not Found` — Task does not exist.
+
+- **cURL Example:**
+  ```bash
+  curl -X PATCH http://localhost:3000/api/tasks/1/status \
+    -H "Authorization: Bearer <admin_jwt_token>" \
+    -H "Content-Type: application/json" \
+    -d "{\"status\":\"Completed\"}"
+  ```
+
 ---
 
 ## npm Scripts
@@ -365,6 +594,6 @@ Authorization: Bearer <your_jwt_token>
 
 - [x] **Stage 1** – Project foundation, database, migrations, seeders
 - [x] **Stage 2** – Authentication (register, login, JWT middleware)
-- [ ] **Stage 3** – Task CRUD endpoints
+- [x] **Stage 3** – Task CRUD endpoints
 - [ ] **Stage 4** – Role-based access control
 - [ ] **Stage 5** – Postman collection & final documentation
